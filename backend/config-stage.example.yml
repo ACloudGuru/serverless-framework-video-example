@@ -1,0 +1,8 @@
+---
+ELASTIC_TRANSCODER_PIPELINE_ID: transcoding pipeline id
+AUTH0_DOMAIN: auth 0 domain
+UPLOAD_URI: https://s3.amazonaws.com
+ACCESS_KEY: The s3 upload user access key id
+SECRET_ACCESS_KEY: The s3 upload user secret access key
+SERVICE_ACCOUNT: name of json private key file from firebase
+DATABASE_URL: firebase database url

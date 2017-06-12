@@ -57,3 +57,10 @@ typings/
 # dotenv environment variables file
 .env
 
+# Ignore firebase private key
+backend/transcode-video-firebase-enabled/*.json
+
+backend/*.yml
+!backend/config-stage.example.yml
+
+website/js/config.js
