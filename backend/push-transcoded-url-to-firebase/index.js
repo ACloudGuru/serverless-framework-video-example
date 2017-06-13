@@ -13,11 +13,13 @@
 'use strict';
 
 var AWS = require('aws-sdk');
-var firebase = require('firebase');
+var firebase = require('firebase-admin');
+
+var serviceAccount = require('./' + process.env.SERVICE_ACCOUNT);
 
 // save the URL to firebase
 firebase.initializeApp({
-  serviceAccount: process.env.SERVICE_ACCOUNT,
+  credential: firebase.credential.cert(serviceAccount),
   databaseURL: process.env.DATABASE_URL
 });
 
