@@ -67,4 +67,4 @@ A serverless video sharing application example using Serverless Framework
 3. Open your browser to [http://localhost:8100](http://localhost:8100)
 
 ## Support
-For help, please ask a question in the project's [gitter community](https://gitter.im/serverless-framework-video-example)
+For help, please ask a question in the project's [gitter community](https://gitter.im/ACloudGuru/serverless-framework-video-example)
