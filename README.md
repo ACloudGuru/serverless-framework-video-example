@@ -1,4 +1,6 @@
 # serverless-framework-video-example
+
+[![Join the chat at https://gitter.im/ACloudGuru/serverless-framework-video-example](https://badges.gitter.im/ACloudGuru/serverless-framework-video-example.svg)](https://gitter.im/ACloudGuru/serverless-framework-video-example?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 A serverless video sharing application example using Serverless Framework
 
 # Disclaimer
