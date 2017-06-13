@@ -13,14 +13,16 @@
 'use strict';
 
 var AWS = require('aws-sdk');
-var firebase = require('firebase');
+var firebase = require('firebase-admin');
+
+var serviceAccount = require('./' + process.env.SERVICE_ACCOUNT);
 
 var elasticTranscoder = new AWS.ElasticTranscoder({
     region: process.env.ELASTIC_TRANSCODER_REGION
 });
 
 firebase.initializeApp({
-  serviceAccount: process.env.SERVICE_ACCOUNT,
+  credential: firebase.credential.cert(serviceAccount),
   databaseURL: process.env.DATABASE_URL
 });
 

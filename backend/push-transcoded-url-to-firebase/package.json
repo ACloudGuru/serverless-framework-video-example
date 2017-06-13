@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "aws-sdk": "^2.3.2",
-    "firebase": "^3.2.1"
+    "firebase-admin": "^5.0.0"
   },
   "author": "Peter Sbarski",
   "license": "BSD-2-Clause",
