@@ -62,5 +62,6 @@ backend/transcode-video-firebase-enabled/*.json
 
 backend/*.yml
 !backend/config-stage.example.yml
+!backend/serverless.yml
 
 website/js/config.js

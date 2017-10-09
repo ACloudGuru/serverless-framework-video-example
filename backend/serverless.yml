@@ -1,0 +1,209 @@
+service: video-sharing
+
+frameworkVersion: '1.15.2'
+
+custom:
+  config: ${file(config-${opt:stage}.yml)}
+  FUNCTION_MEMORY: 128
+  VIDEO_UPLOAD_BUCKET_NAME: ${self:custom.config.VIDEO_UPLOAD_BUCKET_NAME}-${opt:stage}
+  VIDEO_TRANSCODED_BUCKET_NAME: ${self:custom.config.VIDEO_TRANSCODED_BUCKET_NAME}-${opt:stage}
+
+provider:
+  name: aws
+  runtime: nodejs6.10
+  stage: prod
+  region: us-east-1
+  iamRoleStatements:
+  - Effect: Allow
+    Action:
+      - s3:GetObject
+      - s3:PutObject
+    Resource: arn:aws:s3:::*
+  - Effect: Allow
+    Action:
+      - elastictranscoder:Read*
+      - elastictranscoder:List*
+      - elastictranscoder:*Job
+      - elastictranscoder:*Preset
+      - s3:List*
+      - iam:List*
+      - sns:List*
+    Resource: "*"
+  - Effect: Allow
+    Action:
+      - logs:CreateLogGroup
+      - logs:CreateLogStream
+      - logs:PutLogEvents
+    Resource: "*"
+  - Effect: Allow
+    Action:
+      - s3:ListBucket
+    Resource:
+      - arn:aws:s3:::${self:custom.VIDEO_UPLOAD_BUCKET_NAME}
+  - Effect: "Allow"
+    Action:
+      - s3:PutObject
+    Resource:
+      - arn:aws:s3:::${self:custom.VIDEO_UPLOAD_BUCKET_NAME}/*
+
+package:
+  individually: true
+  exclude:
+    - '*/**'
+
+functions:
+  custom-authorizer:
+    handler: custom-authorizer/index.handler
+    memory: ${self:custom.FUNCTION_MEMORY}
+    environment:
+      AUTH0_SECRET: ${self:custom.config.AUTH0_SECRET}
+    package:
+      include:
+        - custom-authorizer/node_modules/**
+        - custom-authorizer/index.js
+
+  user-profile:
+    handler: user-profile/index.handler
+    memory: ${self:custom.FUNCTION_MEMORY}
+    environment:
+      AUTH0_DOMAIN: ${self:custom.config.AUTH0_DOMAIN}
+    events:
+      - http:
+          path: user-profile
+          cors: true
+          method: GET
+          authorizer: custom-authorizer
+
+    package:
+      include:
+        - user-profile/node_modules/**
+        - user-profile/index.js
+
+  s3-upload-policy-document:
+    handler: create-s3-upload-policy-document/index.handler
+    memory: ${self:custom.FUNCTION_MEMORY}
+    environment:
+      UPLOAD_BUCKET: ${self:custom.VIDEO_UPLOAD_BUCKET_NAME}
+      SECRET_ACCESS_KEY: ${self:custom.config.SECRET_ACCESS_KEY}
+      ACCESS_KEY: ${self:custom.config.ACCESS_KEY}
+      UPLOAD_URI: ${self:custom.config.UPLOAD_URI}
+    events:
+      - http:
+          path: s3-policy-document
+          cors: true
+          method: GET
+          authorizer: custom-authorizer
+    package:
+      include:
+        - create-s3-upload-policy-document/node_modules/**
+        - create-s3-upload-policy-document/index.js
+
+  transcode-video:
+    handler: transcode-video-firebase-enabled/index.handler
+    memory: ${self:custom.FUNCTION_MEMORY}
+    timeout: 30
+    environment:
+      ELASTIC_TRANSCODER_REGION: us-east-1
+      ELASTIC_TRANSCODER_PIPELINE_ID: ${self:custom.config.ELASTIC_TRANSCODER_PIPELINE_ID}
+      SERVICE_ACCOUNT: ${self:custom.config.SERVICE_ACCOUNT}
+      DATABASE_URL: ${self:custom.config.DATABASE_URL}
+    package:
+      include:
+        - transcode-video-firebase-enabled/node_modules/**
+        - transcode-video-firebase-enabled/index.js
+        - transcode-video-firebase-enabled/*.json
+
+  save-transcoded-url:
+    handler: push-transcoded-url-to-firebase/index.handler
+    memory: ${self:custom.FUNCTION_MEMORY}
+    environment:
+      S3: https://s3.amazonaws.com/${self:custom.VIDEO_TRANSCODED_BUCKET_NAME}
+      DATABASE_URL: ${self:custom.config.DATABASE_URL}
+      SERVICE_ACCOUNT: ${self:custom.config.SERVICE_ACCOUNT}
+      BUCKET_REGION: us-east-1
+    package:
+      include:
+        - push-transcoded-url-to-firebase/node_modules/**
+        - push-transcoded-url-to-firebase/index.js
+        - push-transcoded-url-to-firebase/*.json
+
+# Other CloudFormation resources
+resources:
+  Resources:
+    VideoUploadBucket:
+      DependsOn:
+        - TranscodeVideoPermissionUploadBucket
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      Properties:
+        BucketName: ${self:custom.VIDEO_UPLOAD_BUCKET_NAME}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins: 
+                - "*"
+              AllowedMethods: 
+                - "GET"
+                - "POST"
+              AllowedHeaders:
+                - "*"
+              MaxAge: 3000
+        NotificationConfiguration:
+          LambdaConfigurations:
+            - Event: "s3:ObjectCreated:*"
+              Function:
+                "Fn::GetAtt": [ TranscodeDashvideoLambdaFunction, Arn ]
+
+    TranscodeVideoPermissionUploadBucket:
+      DependsOn:
+        - TranscodeDashvideoLambdaFunction
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          "Fn::GetAtt": [ TranscodeDashvideoLambdaFunction, Arn ]
+        Action: "lambda:InvokeFunction"
+        Principal: "s3.amazonaws.com"
+        SourceArn: "arn:aws:s3:::${self:custom.VIDEO_UPLOAD_BUCKET_NAME}"
+
+    VideoTranscodedBucket:
+      DependsOn:
+        - PushTranscodedPermissionTranscodedBucket
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      Properties:
+        BucketName: ${self:custom.VIDEO_TRANSCODED_BUCKET_NAME}
+        NotificationConfiguration:
+          LambdaConfigurations:
+            - Event: "s3:ObjectCreated:*"
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: suffix
+                      Value: ".mp4"
+              Function:
+                "Fn::GetAtt": [ SaveDashtranscodedDashurlLambdaFunction, Arn ]
+
+    PushTranscodedPermissionTranscodedBucket:
+      DependsOn:
+        - SaveDashtranscodedDashurlLambdaFunction
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          "Fn::GetAtt": [ SaveDashtranscodedDashurlLambdaFunction, Arn ]
+        Action: "lambda:InvokeFunction"
+        Principal: "s3.amazonaws.com"
+        SourceArn: "arn:aws:s3:::${self:custom.VIDEO_TRANSCODED_BUCKET_NAME}"
+
+    VideoTranscodedBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      DependsOn: 
+        - VideoTranscodedBucket
+      Properties:
+        Bucket: ${self:custom.VIDEO_TRANSCODED_BUCKET_NAME}
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement: 
+            - Sid: "AddPerm"
+              Effect: "Allow"
+              Principal: "*"
+              Action: "s3:GetObject"
+              Resource: "arn:aws:s3:::${self:custom.VIDEO_TRANSCODED_BUCKET_NAME}/*"
